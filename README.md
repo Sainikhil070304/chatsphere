@@ -287,6 +287,3 @@ Sender → AES encrypt(message, CHAT_SECRET) → Server → Receiver → AES dec
 
 ---
 
-## 📄 License
-
-MIT License — free to use and modify.
