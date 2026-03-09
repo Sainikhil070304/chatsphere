@@ -2,14 +2,14 @@ import { useEffect, useState, useRef } from "react";
 import { socket, messageListeners, messageBuffer } from "../socket";
 import API from "../services/api";
 import { encryptMsg, safeDecrypt } from "../crypto";
-
 import { playMessageSound, playSentSound, playTypingSound, resumeAudio } from "../services/sounds";
 
 const fmt=t=>t?new Date(t).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
 const fmtDate=t=>{if(!t)return"";const d=new Date(t),now=new Date();if(d.toDateString()===now.toDateString())return"Today";const y=new Date(now);y.setDate(y.getDate()-1);if(d.toDateString()===y.toDateString())return"Yesterday";return d.toLocaleDateString([],{month:"short",day:"numeric"});};
 const fmtSize=b=>!b?"":b<1048576?(b/1024).toFixed(1)+"KB":(b/1048576).toFixed(1)+"MB";
 const canUnsend=time=>time&&(Date.now()-new Date(time).getTime())<3600000;
-const imgSrc=s=>s?.startsWith("http")?s:`http://localhost:5000${s}`;
+const BASE = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace("/api","") : "http://localhost:5000";
+const imgSrc=s=>!s?"":s.startsWith("http")?s:`${BASE}${s}`;
 
 const withSeps = (msgs) => {
   const r = []; let last = "";
@@ -24,15 +24,15 @@ const withSeps = (msgs) => {
 const BARS = [3,5,8,6,10,7,12,9,6,11,8,5,9,7,4,10,8,6,11,7,5,9,6,8,4,7,10,6,8,5];
 
 function VoicePlayer({ src, isMe }) {
-  const audioRef            = useRef(null);
-  const [playing, setPlaying]   = useState(false);
-  const [current, setCurrent]   = useState(0);
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
 
   const toggle = () => {
     if (!audioRef.current) return;
     if (playing) audioRef.current.pause();
-    else         audioRef.current.play().catch(() => {});
+    else audioRef.current.play().catch(() => {});
     setPlaying(p => !p);
   };
 
@@ -51,14 +51,14 @@ function VoicePlayer({ src, isMe }) {
   const filled   = isMe ? "rgba(255,255,255,0.9)"  : "#a78bfa";
   const unfilled = isMe ? "rgba(255,255,255,0.28)" : "rgba(167,139,250,0.28)";
   const btnBg    = isMe ? "rgba(255,255,255,0.18)" : "rgba(124,107,250,0.18)";
-  const btnIcon  = isMe ? "#fff"                    : "#a78bfa";
+  const btnIcon  = isMe ? "#fff" : "#a78bfa";
   const timeTxt  = isMe ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.4)";
   const activeBars = Math.round(pct * BARS.length);
 
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 4px", minWidth:210, maxWidth:250 }}>
       <audio ref={audioRef} src={src}
-        onLoadedMetadata={e => { setDuration(e.target.duration); }}
+        onLoadedMetadata={e => setDuration(e.target.duration)}
         onTimeUpdate={e => setCurrent(e.target.currentTime)}
         onEnded={() => { setPlaying(false); setCurrent(0); if(audioRef.current) audioRef.current.currentTime=0; }}
       />
@@ -76,9 +76,9 @@ function VoicePlayer({ src, isMe }) {
         <div style={{ display:"flex", alignItems:"center", gap:2, height:24, cursor:"pointer" }} onClick={seek}>
           {BARS.map((h, i) => (
             <div key={i} style={{ width:3, borderRadius:3, flexShrink:0,
-              height: `${(h/12)*100}%`,
+              height:`${(h/12)*100}%`,
               background: i < activeBars ? filled : unfilled,
-              transition: "background 0.1s" }}/>
+              transition:"background 0.1s" }}/>
           ))}
         </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -112,14 +112,14 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
   const [recording,  setRecording]  = useState(false);
   const [recSecs,    setRecSecs]    = useState(0);
 
-  const bottomRef     = useRef(null);
-  const typingTimer   = useRef(null);
-  const meRef         = useRef(currentUser || JSON.parse(localStorage.getItem("me")));
-  const fileRef       = useRef();
+  const bottomRef   = useRef(null);
+  const typingTimer = useRef(null);
+  const meRef       = useRef(currentUser || JSON.parse(localStorage.getItem("me")));
+  const fileRef     = useRef();
   const groupPhotoRef = useRef();
-  const mediaRecRef   = useRef(null);
-  const audioChunks   = useRef([]);
-  const recTimer      = useRef(null);
+  const mediaRecRef = useRef(null);
+  const audioChunks = useRef([]);
+  const recTimer    = useRef(null);
 
   const isGroup     = !!user.isGroup;
   const isOnline    = !isGroup && onlineUsers.includes(String(user._id));
@@ -149,7 +149,8 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
     else if (raw.startsWith("POST:"))  { text = raw; type = "post"; }
     else                               { text = safeDecrypt(raw); }
     const senderId = m.sender?._id || m.sender || m.from;
-    return { _id:m._id, text, type, fileInfo, me: String(senderId)===String(meRef.current._id),
+    return { _id:m._id, text, type, fileInfo,
+      me: String(senderId)===String(meRef.current._id),
       time:m.createdAt, senderName:m.sender?.firstName||m.senderName||"" };
   };
 
@@ -223,12 +224,11 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
     playSentSound();
   };
 
-  // ── FIX: No manual Content-Type header — axios sets boundary automatically ──
   const sendFile = async (e) => {
     const file = e.target.files[0]; if (!file) return; setUploading(true);
     try {
       const fd = new FormData(); fd.append("file", file);
-      const res = await API.post("/chat/upload", fd);  // axios auto-sets multipart boundary
+      const res = await API.post("/chat/upload", fd);
       const isImg = file.type.startsWith("image/");
       const payload = isImg ? "IMG:"+res.data.url : "FILE:"+JSON.stringify({url:res.data.url,name:res.data.name||file.name,size:res.data.size||file.size});
       const type = isImg ? "image" : "file";
@@ -241,11 +241,9 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
     } catch(err) {
       console.error("Upload error:", err?.response?.data || err.message);
       alert("Upload failed: " + (err?.response?.data?.error || err.message || "server error"));
-    }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value=""; }
+    } finally { setUploading(false); if (fileRef.current) fileRef.current.value=""; }
   };
 
-  // ── Voice recording ──────────────────────────────────────────────
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -259,7 +257,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
         setUploading(true);
         try {
           const fd = new FormData(); fd.append("file", blob, "voice.webm");
-          const res = await API.post("/chat/upload", fd);  // axios auto-sets multipart boundary
+          const res = await API.post("/chat/upload", fd);
           const payload = "AUDIO:" + res.data.url;
           const msgRes = await API.post(isGroup?"/groups/message":"/chat", isGroup?{groupId:user.chatId,encrypted:payload,type:"audio"}:{chat:user.chatId,encrypted:payload,type:"audio"});
           socket.emit("send",{encrypted:payload,to:user._id,from:meRef.current._id,chatId:user.chatId,type:"audio",isGroup,groupId:isGroup?user.chatId:undefined,msgId:msgRes?.data?._id});
@@ -267,8 +265,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
         } catch(err) {
           console.error("Voice upload error:", err?.response?.data || err.message);
           alert("Voice send failed");
-        }
-        finally { setUploading(false); }
+        } finally { setUploading(false); }
       };
       mr.start();
       mediaRecRef.current = mr;
@@ -303,7 +300,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
     const file = e.target.files[0]; if (!file) return;
     try {
       const fd = new FormData(); fd.append("avatar", file);
-      const res = await API.post(`/groups/avatar/${user.chatId}`, fd);  // axios auto-sets multipart boundary
+      const res = await API.post(`/groups/avatar/${user.chatId}`, fd);
       setGroupData(prev => ({...prev, avatar: res.data.avatar}));
     } catch (e) { alert(e.response?.data?.msg || "Failed to upload photo"); }
     if (groupPhotoRef.current) groupPhotoRef.current.value = "";
@@ -358,7 +355,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
           style={{cursor:isGroup?"pointer":"default"}}
           onClick={() => isGroup && setShowInfo(s=>!s)}>
           {!isGroup && user.avatar
-            ? <img src={`http://localhost:5000${user.avatar}`} alt=""/>
+            ? <img src={imgSrc(user.avatar)} alt=""/>
             : isGroup
               ? (groupData?.avatar
                   ? <img src={imgSrc(groupData.avatar)} alt="" style={{width:"100%",height:"100%",borderRadius:"50%",objectFit:"cover"}}/>
@@ -373,7 +370,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
             style={{cursor:!isGroup?"pointer":"default"}}
             onClick={() => !isGroup && onViewProfile && onViewProfile(user)}>
             {displayName}
-            {!isGroup && <span style={{fontSize:12,color:"var(--accent2)",fontWeight:400,marginLeft:6}}>↗ profile</span>}
+            {!isGroup && <span style={{fontSize:12,color:"var(--accent2)",fontWeight:400,marginLeft:6}}>profile</span>}
           </div>
           <div className="chat-header-status">
             {isGroup
@@ -433,8 +430,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
                 </div>
                 {isAdmin && (
                   <button onClick={() => groupPhotoRef.current?.click()} title="Change group photo"
-                    style={{ position:"absolute",bottom:-2,right:-2,
-                      width:22,height:22,borderRadius:"50%",
+                    style={{ position:"absolute",bottom:-2,right:-2,width:22,height:22,borderRadius:"50%",
                       background:"#7c6bfa",border:"2px solid #080b14",
                       cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0 }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -479,7 +475,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
               return (
                 <div key={m._id} className="group-member-item">
                   <div className="tile-avatar" style={{width:30,height:30,fontSize:12,flexShrink:0,borderRadius:"50%"}}>
-                    {m.avatar?<img src={`http://localhost:5000${m.avatar}`} alt=""/>:name[0]?.toUpperCase()}
+                    {m.avatar ? <img src={imgSrc(m.avatar)} alt=""/> : name[0]?.toUpperCase()}
                   </div>
                   <span style={{flex:1,fontSize:13,fontWeight:500}}>{name}</span>
                   {mIsAdmin && <span className="badge admin">Admin</span>}
@@ -592,7 +588,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
         <div className="ib-input-wrap">
           <input
             value={msg}
-            placeholder={recording ? `Recording… ${recSecs}s` : `Message ${displayName}...`}
+            placeholder={recording ? `Recording... ${recSecs}s` : `Message ${displayName}...`}
             disabled={recording}
             onChange={e=>{setMsg(e.target.value);socket.emit("typing",isGroup?{groupId:user.chatId,userId:meRef.current._id}:user._id);}}
             onKeyDown={e=>e.key==="Enter"&&send()}

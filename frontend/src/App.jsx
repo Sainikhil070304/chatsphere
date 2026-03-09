@@ -16,6 +16,12 @@ import {
   playHangup,
 } from "./services/sounds";
 
+const BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace("/api", "")
+  : "http://localhost:5000";
+
+const imgSrc = (s) => !s ? "" : s.startsWith("http") ? s : `${BASE}${s}`;
+
 export default function App() {
   const [user,           setUser]        = useState(null);
   const [chat,           setChat]        = useState(null);
@@ -25,7 +31,6 @@ export default function App() {
   const [viewingProfile, setViewing]     = useState(null);
   const [activeCall,     setActiveCall]  = useState(null);
   const [incomingCall,   setIncoming]    = useState(null);
-  // Store the raw offer so callee can answer it
   const incomingRef = useRef(null);
 
   useEffect(() => {
@@ -53,18 +58,12 @@ export default function App() {
       startCallRing();
     };
     const onCallRejected = () => {
-      // Call.jsx is mounted on caller side during ringing — it will handle its own sounds
-      // BUT call:rejected is NOT handled in Call.jsx, so we stop sounds here
       stopAllSounds();
       playHangup();
       setActiveCall(null);
       alert("Call was declined.");
     };
-    const onCallEnded = () => {
-      // Call.jsx listens to call:ended and calls endCall(false) which stops sounds
-      // App.jsx just clears the state — NO sound calls here to avoid double-fire
-      setActiveCall(null);
-    };
+    const onCallEnded = () => { setActiveCall(null); };
 
     socket.on("onlineList",    onList);
     socket.on("userOnline",    onOnline);
@@ -111,18 +110,14 @@ export default function App() {
   const startCall = (targetUser, callType) => {
     resumeAudio();
     startOutgoingRing();
-    setActiveCall({
-      peer: targetUser,
-      isVideo: callType === "video",
-      isCaller: true,
-    });
+    setActiveCall({ peer: targetUser, isVideo: callType === "video", isCaller: true });
     setIncoming(null);
   };
 
   const acceptCall = () => {
     const incoming = incomingRef.current;
     if (!incoming) return;
-    stopAllSounds();  // stop incoming ring; Call.jsx will play connected when WebRTC connects
+    stopAllSounds();
     resumeAudio();
     setActiveCall({
       peer: {
@@ -194,7 +189,7 @@ export default function App() {
         <div className="nav-bottom">
           <div className="user-avatar-mini" onClick={() => setView("profile")}>
             {user.avatar
-              ? <img src={`http://localhost:5000${user.avatar}`} alt="" />
+              ? <img src={imgSrc(user.avatar)} alt="" />
               : <span>{(user.firstName||user.username||"?")?.[0]?.toUpperCase()}</span>
             }
             <div className="online-ring" />
@@ -226,7 +221,6 @@ export default function App() {
       {view === "admin"       && user.isAdmin && <AdminPanel onBack={() => setView("chat")} />}
       {view === "userprofile" && <UserProfile username={viewingProfile} currentUser={user} onBack={() => setView("chat")} onStartChat={handleStartChatFromProfile} />}
 
-      {/* ── Active call overlay — uses Call.jsx with proper WebRTC ── */}
       {activeCall && (
         <Call
           peer={activeCall.peer}
@@ -237,7 +231,6 @@ export default function App() {
         />
       )}
 
-      {/* ── Incoming call banner (shown to callee) ── */}
       <IncomingCallBanner
         call={incomingCall && !activeCall ? {
           callerName: incomingCall.fromName || incomingCall.callerName || "Someone",
