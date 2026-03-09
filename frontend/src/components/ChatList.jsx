@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+// useState is used by Avatar component for image error handling
 import API from "../services/api";
 import { socket } from "../socket";
 
@@ -11,27 +12,54 @@ const userName = (u) =>
 const initials = (name = "") =>
   name.split(" ").map((w) => w[0] || "").join("").toUpperCase().slice(0, 2) || "?";
 
-const Avatar = ({ src, name, size = 42, online }) => (
-  <div style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
-    {src
-      ? <img src={src.startsWith("http") ? src : `${BASE}${src}`} alt={name}
-             style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }} />
-      : <div style={{
-          width: size, height: size, borderRadius: "50%",
-          background: "linear-gradient(135deg,#7c3aed,#4f46e5)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: size * 0.38, fontWeight: 700, color: "#fff",
-        }}>{initials(name)}</div>}
-    {online !== undefined && (
-      <span style={{
-        position: "absolute", bottom: 1, right: 1,
-        width: 10, height: 10, borderRadius: "50%",
-        background: online ? "#22c55e" : "rgba(255,255,255,0.2)",
-        border: "2px solid #0f0f1a",
-      }} />
-    )}
-  </div>
-);
+// DSA: color palette — deterministic O(1) color from name string
+const avatarColors = [
+  "linear-gradient(135deg,#7c3aed,#4f46e5)",
+  "linear-gradient(135deg,#db2777,#9333ea)",
+  "linear-gradient(135deg,#0891b2,#2563eb)",
+  "linear-gradient(135deg,#059669,#0891b2)",
+  "linear-gradient(135deg,#d97706,#dc2626)",
+  "linear-gradient(135deg,#7c3aed,#db2777)",
+  "linear-gradient(135deg,#2563eb,#059669)",
+];
+const avatarColor = (name = "") => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return avatarColors[Math.abs(hash) % avatarColors.length];
+};
+
+const Avatar = ({ src, name, size = 42, online }) => {
+  const [imgError, setImgError] = useState(false);
+  const imgSrc = src ? (src.startsWith("http") ? src : `${BASE}${src}`) : null;
+  const showImg = imgSrc && !imgError;
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
+      {showImg
+        ? <img
+            src={imgSrc} alt={name}
+            onError={() => setImgError(true)}
+            style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }}
+          />
+        : <div style={{
+            width: size, height: size, borderRadius: "50%",
+            background: avatarColor(name),
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: size * 0.36, fontWeight: 700, color: "#fff",
+            letterSpacing: 0.5, userSelect: "none",
+          }}>{initials(name)}</div>
+      }
+      {online !== undefined && (
+        <span style={{
+          position: "absolute", bottom: 1, right: 1,
+          width: size * 0.22, height: size * 0.22, borderRadius: "50%",
+          background: online ? "#22c55e" : "transparent",
+          border: online ? `2px solid #0f0f1a` : "none",
+        }} />
+      )}
+    </div>
+  );
+};
 
 // DSA: build chat object for App — O(1) member lookup via find()
 function buildChatObj(raw, currentUser) {
