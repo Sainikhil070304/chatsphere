@@ -30,7 +30,9 @@ const avatarColor = (name = "") => {
 
 const Avatar = ({ src, name, size = 42, online }) => {
   const [imgError, setImgError] = useState(false);
-  const imgSrc = src ? (src.startsWith("http") ? src : `${BASE}${src}`) : null;
+  const imgSrc = src
+    ? (src.startsWith("http") || src.startsWith("data:") ? src : `${BASE}${src}`)
+    : null;
   const showImg = imgSrc && !imgError;
 
   return (

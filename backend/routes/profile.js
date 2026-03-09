@@ -1,25 +1,12 @@
-// backend/routes/profile.js
-const router = require("express").Router();
-const User = require("../models/User");
-const auth = require("../middleware/authMiddleware");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const router  = require("express").Router();
+const User    = require("../models/User");
+const auth    = require("../middleware/authMiddleware");
+const multer  = require("multer");
 
-// Local storage for avatars
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "../uploads/avatars");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
-  },
-});
+// Use memory storage — no disk needed, works on Render free tier
 const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024 }, // 3MB max
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) cb(null, true);
     else cb(new Error("Only images allowed"));
@@ -49,10 +36,10 @@ router.put("/me", auth, async (req, res) => {
   try {
     const { firstName, middleName, lastName, bio, username } = req.body;
     const updates = {};
-    if (firstName) updates.firstName = firstName.trim();
+    if (firstName)            updates.firstName  = firstName.trim();
     if (middleName !== undefined) updates.middleName = middleName.trim();
-    if (lastName) updates.lastName = lastName.trim();
-    if (bio !== undefined) updates.bio = bio.slice(0, 150);
+    if (lastName)             updates.lastName   = lastName.trim();
+    if (bio !== undefined)    updates.bio        = bio.slice(0, 150);
     if (username) {
       const clean = username.toLowerCase().trim();
       if (!/^[a-z0-9_.]{3,20}$/.test(clean))
@@ -67,16 +54,21 @@ router.put("/me", auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// UPLOAD avatar
+// UPLOAD avatar — stored as base64 data URL in MongoDB
+// Works on Render free tier (no disk persistence needed)
 router.post("/avatar", auth, upload.single("avatar"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ msg: "No file uploaded" });
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+    // Convert to base64 data URL
+    const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      { avatar: avatarUrl },
+      { avatar: base64 },
       { new: true }
     ).select("-password");
+
     res.json({ avatar: user.avatar, user });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -84,9 +76,7 @@ router.post("/avatar", auth, upload.single("avatar"), async (req, res) => {
 // BLOCK user
 router.post("/block/:userId", auth, async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user.id, {
-      $addToSet: { blockedUsers: req.params.userId }
-    });
+    await User.findByIdAndUpdate(req.user.id, { $addToSet: { blockedUsers: req.params.userId } });
     res.json({ msg: "User blocked" });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -94,9 +84,7 @@ router.post("/block/:userId", auth, async (req, res) => {
 // UNBLOCK user
 router.post("/unblock/:userId", auth, async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user.id, {
-      $pull: { blockedUsers: req.params.userId }
-    });
+    await User.findByIdAndUpdate(req.user.id, { $pull: { blockedUsers: req.params.userId } });
     res.json({ msg: "User unblocked" });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -104,14 +92,13 @@ router.post("/unblock/:userId", auth, async (req, res) => {
 // GET blocked users
 router.get("/me/blocked", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate("blockedUsers", "username firstName lastName avatar");
+    const user = await User.findById(req.user.id)
+      .populate("blockedUsers", "username firstName lastName avatar");
     res.json(user.blockedUsers);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-module.exports = router;
-
-// SAVE public key (called after RSA key generation on login)
+// SAVE public key
 router.post("/publickey", auth, async (req, res) => {
   try {
     const { publicKey } = req.body;
@@ -120,3 +107,5 @@ router.post("/publickey", auth, async (req, res) => {
     res.json({ msg: "Public key saved" });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+module.exports = router;
