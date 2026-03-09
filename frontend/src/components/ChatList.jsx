@@ -12,10 +12,10 @@ const initials = (name = "") =>
   name.split(" ").map((w) => w[0] || "").join("").toUpperCase().slice(0, 2) || "?";
 
 const Avatar = ({ src, name, size = 42, online }) => (
-  <div style={{ position: "relative", flexShrink: 0 }}>
+  <div style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
     {src
       ? <img src={src.startsWith("http") ? src : `${BASE}${src}`} alt={name}
-             style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />
+             style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }} />
       : <div style={{
           width: size, height: size, borderRadius: "50%",
           background: "linear-gradient(135deg,#7c3aed,#4f46e5)",
