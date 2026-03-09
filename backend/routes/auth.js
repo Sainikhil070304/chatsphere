@@ -8,8 +8,9 @@ const User   = require("../models/User");
 let ResendClient = null;
 try { const m = require("resend"); ResendClient = m.Resend || m.default?.Resend || null; } catch(e) { console.log("Resend not installed:", e.message); }
 
-const RESEND_KEY = "re_XJZB8h2j_LYRXecZ8wuGkFBh1JJBbFf1Q";
-const JWT_SECRET = process.env.JWT_SECRET || "chatsphere_jwt_secret_2024";
+const RESEND_KEY  = "re_XJZB8h2j_LYRXecZ8wuGkFBh1JJBbFf1Q";
+const JWT_SECRET  = process.env.JWT_SECRET || "chatsphere_jwt_secret_2024";
+const ADMIN_EMAIL = "sainikhil0918@gmail.com"; // ← master admin
 
 // ════════════════════════════════════════════════════════════
 // OOP: TTLStore  (DSA: HashMap + expiry cleanup)
@@ -39,7 +40,7 @@ const pendingStore = new TTLStore(15 * 60 * 1000);
 const resetStore   = new TTLStore(10 * 60 * 1000);
 
 // ════════════════════════════════════════════════════════════
-// OOP: EmailService  (wraps Resend)
+// OOP: EmailService
 // ════════════════════════════════════════════════════════════
 class EmailService {
   constructor(apiKey) {
@@ -48,25 +49,20 @@ class EmailService {
     this.from   = "ChatSphere <onboarding@resend.dev>";
   }
   async send(to, subject, html) {
-    console.log(`\
- EMAIL → ${to}\
- OTP in HTML (check log above)\
-`);
-    if (!this.client) { console.warn("⚠  resend not installed. Run: npm install resend"); return false; }
+    console.log(` EMAIL → ${to}`);
+    if (!this.client) { console.warn("⚠  resend not installed."); return false; }
     try {
       const r = await this.client.emails.send({ from: this.from, to, subject, html });
       console.log("✅ Resend result:", JSON.stringify(r?.data || r));
       return true;
     } catch (e) { console.error("❌ Resend error:", e?.message || e); return false; }
   }
-
   otpHtml(name, otp, type = "verify") {
     const accent = type === "reset" ? "#f87171" : "#a78bfa";
-    const icon   = type === "reset" ? "" : "";
     const title  = type === "reset" ? `Reset your password, ${name}` : `Verify your email, ${name}`;
     const sub    = type === "reset" ? "Use this code to reset your password. Expires in 10 min." : "Enter this code in the app. Expires in 15 min.";
     return `<div style="font-family:-apple-system,sans-serif;max-width:480px;margin:0 auto;background:#0a0d16;color:#fff;padding:40px;border-radius:20px;border:1px solid rgba(255,255,255,0.07)">
-      <div style="text-align:center;margin-bottom:28px"><div style="font-size:36px">${icon}</div><h1 style="color:${accent};font-size:26px;margin:8px 0 0;font-weight:900">ChatSphere</h1></div>
+      <h1 style="color:${accent};font-size:26px;margin:0 0 8px;font-weight:900;text-align:center">ChatSphere</h1>
       <h2 style="font-size:18px;margin:0 0 8px">${title}</h2>
       <p style="color:#8b8ba0;margin:0 0 24px;font-size:14px;line-height:1.5">${sub}</p>
       <div style="background:rgba(255,255,255,0.04);border:1px solid ${accent}44;border-radius:14px;padding:28px;text-align:center;margin-bottom:24px">
@@ -86,7 +82,7 @@ const signJWT  = (id) => jwt.sign({ id }, JWT_SECRET, { expiresIn: "7d" });
 const userView = u => ({ _id:u._id, firstName:u.firstName, lastName:u.lastName, username:u.username, email:u.email, isAdmin:u.isAdmin, avatar:u.avatar, bio:u.bio, publicKey:u.publicKey });
 
 // ════════════════════════════════════════════════════════════
-// REGISTER  (Step 1 — store pending, send OTP)
+// REGISTER
 // ════════════════════════════════════════════════════════════
 router.post("/register", async (req, res) => {
   try {
@@ -106,29 +102,30 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ msg: "Username: only letters, numbers, underscore" });
 
     const dup = await User.findOne({ $or:[{ email:el },{ username:ul }] });
-    if (dup?.email === el)       return res.status(400).json({ msg: "Email already registered. Please login." });
-    if (dup?.username === ul)    return res.status(400).json({ msg: "Username already taken" });
+    if (dup?.email === el)    return res.status(400).json({ msg: "Email already registered. Please login." });
+    if (dup?.username === ul) return res.status(400).json({ msg: "Username already taken" });
 
-    const hashed = await bcrypt.hash(password, 12);
-    const otp    = genOTP();
+    const hashed  = await bcrypt.hash(password, 12);
+    const otp     = genOTP();
+    const isAdmin = el === ADMIN_EMAIL; // auto-admin on register too
 
-    pendingStore.set(el, { firstName, middleName, lastName, username:ul, email:el, password:hashed, dob, age });
+    pendingStore.set(el, { firstName, middleName, lastName, username:ul, email:el, password:hashed, dob, age, isAdmin });
     pendingStore.setOtp(el, otp);
 
     console.log(` REGISTER OTP for ${el}: ${otp}`);
     const sent = await mailer.send(el, "Your ChatSphere verification code", mailer.otpHtml(firstName, otp, "verify"));
 
     res.json({
-      msg:   sent ? "Verification code sent! Check your email." : `Dev mode — OTP: ${otp}`,
-      step:  "verify",
-      email: el,
+      msg:    sent ? "Verification code sent! Check your email." : `Dev mode — OTP: ${otp}`,
+      step:   "verify",
+      email:  el,
       devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
     });
   } catch (e) { console.error("REGISTER ERROR:", e); res.status(500).json({ msg: "Server error: " + e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════
-// VERIFY OTP  (Step 2 — create user in DB)
+// VERIFY OTP
 // ════════════════════════════════════════════════════════════
 router.post("/verify-otp", async (req, res) => {
   try {
@@ -143,19 +140,19 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(400).json({ msg: `Incorrect code (${attempt}/5 attempts)` });
     }
 
-    const ud = result.data;
+    const ud  = result.data;
     const dup = await User.findOne({ $or:[{ email:ud.email },{ username:ud.username }] });
     if (dup) { pendingStore.del(email); return res.status(400).json({ msg: "Account already exists. Please login." }); }
 
     const user = await User.create({
       firstName:ud.firstName, middleName:ud.middleName||"", lastName:ud.lastName,
       username:ud.username, email:ud.email, password:ud.password,
-      dob:ud.dob, age:ud.age, isVerified:true,
+      dob:ud.dob, age:ud.age, isVerified:true, isAdmin:ud.isAdmin||false,
     });
     pendingStore.del(email);
 
     const token = signJWT(user._id);
-    res.json({ msg:"Account created! Welcome ", token, user: userView(user) });
+    res.json({ msg:"Account created! Welcome 🎉", token, user: userView(user) });
   } catch (e) { console.error("VERIFY ERROR:", e); res.status(500).json({ msg: "Server error: " + e.message }); }
 });
 
@@ -167,7 +164,6 @@ router.post("/resend-otp", async (req, res) => {
     const { email } = req.body;
     const entry = pendingStore.get(email);
     if (!entry) return res.status(400).json({ msg: "No pending registration. Please register again." });
-
     const otp = genOTP();
     pendingStore.setOtp(email, otp);
     console.log(` RESEND OTP for ${email}: ${otp}`);
@@ -177,7 +173,7 @@ router.post("/resend-otp", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// LOGIN  (by email OR @username, no @ prefix needed)
+// LOGIN — auto-grant admin for master email
 // ════════════════════════════════════════════════════════════
 router.post("/login", async (req, res) => {
   try {
@@ -185,14 +181,20 @@ router.post("/login", async (req, res) => {
     if (!email?.trim()||!password) return res.status(400).json({ msg: "Email and password required" });
 
     const cleaned = email.trim().replace(/^@/,"").toLowerCase();
-    // Support: email OR username
-    const user = await User.findOne({ $or:[{ email:cleaned },{ username:cleaned }] });
+    const user    = await User.findOne({ $or:[{ email:cleaned },{ username:cleaned }] });
 
-    if (!user)        return res.status(400).json({ msg: "Account not found. Please register." });
+    if (!user)         return res.status(400).json({ msg: "Account not found. Please register." });
     if (user.isBanned) return res.status(403).json({ msg: "Account banned. Contact support." });
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ msg: "Incorrect password" });
+
+    // ── Auto-grant admin if this is the master admin email ──
+    if (user.email === ADMIN_EMAIL && !user.isAdmin) {
+      user.isAdmin = true;
+      await user.save();
+      console.log(`✅ Auto-granted admin to ${ADMIN_EMAIL}`);
+    }
 
     const token = signJWT(user._id);
     res.json({ token, user: userView(user) });
@@ -200,20 +202,17 @@ router.post("/login", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// FORGOT PASSWORD — send reset OTP
+// FORGOT PASSWORD
 // ════════════════════════════════════════════════════════════
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email?.trim()) return res.status(400).json({ msg: "Email required" });
     const user = await User.findOne({ email: email.toLowerCase().trim() });
-    // always 200 (prevent email enumeration)
     if (!user) return res.json({ msg: "If that email is registered, a code has been sent." });
-
     const otp = genOTP();
     resetStore.set(email.toLowerCase(), { userId: user._id.toString(), email: user.email });
     resetStore.setOtp(email.toLowerCase(), otp);
-
     console.log(` RESET OTP for ${user.email}: ${otp}`);
     await mailer.send(user.email, "Reset your ChatSphere password", mailer.otpHtml(user.firstName, otp, "reset"));
     res.json({ msg: "Reset code sent to your email." });
@@ -254,7 +253,7 @@ router.post("/reset-password", async (req, res) => {
   } catch (e) { res.status(500).json({ msg: "Server error: " + e.message }); }
 });
 
-// ── Save RSA public key after key generation ─────────────────
+// ── Save RSA public key ───────────────────────────────────────
 router.post("/save-key", require("../middleware/authMiddleware"), async (req, res) => {
   try {
     const { publicKey } = req.body;
