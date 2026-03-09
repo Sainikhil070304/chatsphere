@@ -4,25 +4,16 @@ const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const User     = require("../models/User");
 const mongoose = require("mongoose");
-const nodemailer = require("nodemailer");
+const https    = require("https");  // built-in, no install needed
 
 const JWT_SECRET  = process.env.JWT_SECRET  || "chatsphere_jwt_secret_2024";
 const ADMIN_EMAIL = "sainikhil0918@gmail.com";
 
 // ════════════════════════════════════════════════════════════
-// Email — Brevo SMTP (sends to ANY email, free 300/day)
-// Set in Railway: BREVO_USER=your@email.com  BREVO_PASS=your-smtp-key
+// Email — Brevo HTTP API (port 443, works on Render free tier)
+// Add to Render env vars: BREVO_API_KEY = your-api-key
+// Get from: app.brevo.com → Settings (gear icon) → API Keys → Generate
 // ════════════════════════════════════════════════════════════
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_PASS,
-  },
-});
-
 const otpHtml = (name, otp, type = "verify") => {
   const accent = type === "reset" ? "#f87171" : "#a78bfa";
   const title  = type === "reset" ? `Reset your password, ${name}` : `Verify your email, ${name}`;
@@ -38,26 +29,45 @@ const otpHtml = (name, otp, type = "verify") => {
   </div>`;
 };
 
-const sendEmail = async (to, subject, html) => {
+const sendEmail = (to, subject, html) => {
   console.log(` EMAIL → ${to}`);
-  // If Brevo not configured, log OTP to console (dev fallback)
-  if (!process.env.BREVO_USER || !process.env.BREVO_PASS) {
-    console.warn("⚠  BREVO_USER/BREVO_PASS not set — email not sent");
-    return false;
+  if (!process.env.BREVO_API_KEY) {
+    console.warn("⚠  BREVO_API_KEY not set — email not sent");
+    return Promise.resolve(false);
   }
-  try {
-    await transporter.sendMail({
-      from: `"ChatSphere" <${process.env.BREVO_USER}>`,
-      to,
+  return new Promise((resolve) => {
+    const body = JSON.stringify({
+      sender:      { name: "ChatSphere", email: ADMIN_EMAIL },
+      to:          [{ email: to }],
       subject,
-      html,
+      htmlContent: html,
     });
-    console.log("✅ Email sent via Brevo");
-    return true;
-  } catch (e) {
-    console.error("❌ Brevo error:", e?.message || e);
-    return false;
-  }
+    const req = https.request({
+      hostname: "api.brevo.com",
+      path:     "/v3/smtp/email",
+      method:   "POST",
+      headers:  {
+        "Content-Type":   "application/json",
+        "api-key":        process.env.BREVO_API_KEY,
+        "Content-Length": Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = "";
+      res.on("data", d => data += d);
+      res.on("end", () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log("✅ Email sent via Brevo API");
+          resolve(true);
+        } else {
+          console.error("❌ Brevo API error:", res.statusCode, data);
+          resolve(false);
+        }
+      });
+    });
+    req.on("error", (e) => { console.error("❌ Brevo request error:", e.message); resolve(false); });
+    req.write(body);
+    req.end();
+  });
 };
 
 // ════════════════════════════════════════════════════════════
