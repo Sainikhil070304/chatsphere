@@ -1,0 +1,41 @@
+require("dotenv").config();
+const mongoose = require("mongoose");
+
+mongoose.connect(process.env.MONGO_URI).then(async () => {
+  const Chat    = require("./models/Chat");
+  const User    = require("./models/User");
+  const Message = require("./models/Message");
+
+  // Get all real user IDs
+  const users   = await User.find({}, "_id").lean();
+  const validIds = new Set(users.map(u => u._id.toString()));
+
+  // Find all chats
+  const chats = await Chat.find({}).lean();
+
+  const orphaned = [];
+  for (const chat of chats) {
+    // A chat is orphaned if any member no longer exists in users collection
+    const hasOrphan = chat.members.some(m => !validIds.has(m.toString()));
+    if (hasOrphan) orphaned.push(chat);
+  }
+
+  if (orphaned.length === 0) {
+    console.log("✅ No orphaned chats found.");
+    await mongoose.disconnect();
+    return;
+  }
+
+  console.log(`Found ${orphaned.length} orphaned chat(s):`);
+  orphaned.forEach(c => console.log("  Chat ID:", c._id, "| members:", c.members.map(String)));
+
+  // Delete orphaned chats AND their messages
+  for (const chat of orphaned) {
+    await Message.deleteMany({ chatId: chat._id });
+    await Chat.deleteOne({ _id: chat._id });
+    console.log(`  🗑️  Deleted chat ${chat._id} and its messages`);
+  }
+
+  console.log("\n✅ Done. Refresh your app.");
+  await mongoose.disconnect();
+});
