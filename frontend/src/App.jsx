@@ -122,6 +122,8 @@ export default function App() {
     if (!incoming) return;
     stopAllSounds();
     resumeAudio();
+    // Tell server we accepted — server will send us the stored offer
+    socket.emit("call:accept", { from: incoming.from });
     setActiveCall({
       peer: {
         _id: incoming.from,
