@@ -16,11 +16,14 @@ import {
   playHangup,
 } from "./services/sounds";
 
-const BASE = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace("/api", "")
-  : "http://localhost:5000";
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-const imgSrc = (s) => !s ? "" : s.startsWith("http") ? s : `${BASE}${s}`;
+// Handles base64, full URLs, and relative paths
+const imgSrc = (s) => {
+  if (!s) return "";
+  if (s.startsWith("data:") || s.startsWith("http")) return s;
+  return `${BASE}${s}`;
+};
 
 export default function App() {
   const [user,           setUser]        = useState(null);
@@ -141,6 +144,11 @@ export default function App() {
     incomingRef.current = null;
   };
 
+  const updateUser = (u) => {
+    setUser(u);
+    localStorage.setItem("me", JSON.stringify(u));
+  };
+
   if (!user) return (
     <div className="auth-page">
       <div className="auth-brand">
@@ -187,11 +195,21 @@ export default function App() {
           )}
         </div>
         <div className="nav-bottom">
-          <div className="user-avatar-mini" onClick={() => setView("profile")}>
+          <div className="user-avatar-mini" onClick={() => setView("profile")} title="My Profile">
             {user.avatar
-              ? <img src={imgSrc(user.avatar)} alt="" />
-              : <span>{(user.firstName||user.username||"?")?.[0]?.toUpperCase()}</span>
+              ? <img src={imgSrc(user.avatar)} alt=""
+                  onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+                />
+              : null
             }
+            <span style={{
+              display: user.avatar ? "none" : "flex",
+              width: "100%", height: "100%",
+              alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700, color: "#fff",
+            }}>
+              {(user.firstName || user.username || "?")[0].toUpperCase()}
+            </span>
             <div className="online-ring" />
           </div>
           <button className="logout-btn" onClick={handleLogout} title="Logout">
@@ -217,7 +235,7 @@ export default function App() {
         </>
       )}
       {view === "feed"        && <Feed currentUser={user} />}
-      {view === "profile"     && <Profile user={user} setUser={u => { setUser(u); localStorage.setItem("me",JSON.stringify(u)); }} onBack={() => setView("chat")} />}
+      {view === "profile"     && <Profile user={user} setUser={updateUser} onBack={() => setView("chat")} />}
       {view === "admin"       && user.isAdmin && <AdminPanel onBack={() => setView("chat")} />}
       {view === "userprofile" && <UserProfile username={viewingProfile} currentUser={user} onBack={() => setView("chat")} onStartChat={handleStartChatFromProfile} />}
 
