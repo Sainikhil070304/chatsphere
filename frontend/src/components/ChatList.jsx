@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import API from "../services/api";
 import { socket } from "../socket";
 
-// DSA: O(1) name resolution — no displayName field, use firstName+lastName
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// DSA: O(1) name resolution
 const userName = (u) =>
-  u ? ([u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || "User") : "User";
+  u ? ([u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || "?") : "?";
 
 const initials = (name = "") =>
   name.split(" ").map((w) => w[0] || "").join("").toUpperCase().slice(0, 2) || "?";
@@ -12,7 +14,7 @@ const initials = (name = "") =>
 const Avatar = ({ src, name, size = 42, online }) => (
   <div style={{ position: "relative", flexShrink: 0 }}>
     {src
-      ? <img src={src.startsWith("http") ? src : `http://localhost:5000${src}`} alt={name}
+      ? <img src={src.startsWith("http") ? src : `${BASE}${src}`} alt={name}
              style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />
       : <div style={{
           width: size, height: size, borderRadius: "50%",
@@ -74,17 +76,13 @@ export default function ChatList({ open, currentUser, onlineUsers = [] }) {
     try {
       const { data } = await API.get("/chat");
       if (!Array.isArray(data)) return;
-
-      // DSA: deduplicate using HashMap — O(n), keeps latest per pair
       dmMap.current.clear();
       data.forEach(chat => {
-        // Key = sorted member IDs — guaranteed unique per pair
         const key = (chat.members || [])
           .map(m => String(m._id || m))
           .sort()
           .join(":");
         const existing = dmMap.current.get(key);
-        // Keep the one with the later updatedAt
         if (!existing || new Date(chat.updatedAt) > new Date(existing.updatedAt)) {
           dmMap.current.set(key, chat);
         }
@@ -116,14 +114,12 @@ export default function ChatList({ open, currentUser, onlineUsers = [] }) {
   useEffect(() => {
     const onReceive = (msg) => {
       if (msg.isGroup || msg.groupId) {
-        // Update group last message in-place
         setGroups(prev => prev.map(g =>
           String(g._id) === String(msg.groupId)
             ? { ...g, lastMessage: "💬 Message", updatedAt: new Date() }
             : g
         ));
       } else {
-        // Update DM last message in-place — no re-fetch needed
         setDms(prev => {
           const updated = prev.map(d => {
             const members = d.members || [];
@@ -133,17 +129,15 @@ export default function ChatList({ open, currentUser, onlineUsers = [] }) {
             );
             return involved ? { ...d, lastMessage: "💬 Message", updatedAt: new Date() } : d;
           });
-          // Sort by updatedAt — DSA: O(n log n)
           return [...updated].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         });
       }
     };
-
     socket.on("receive", onReceive);
     return () => socket.off("receive", onReceive);
   }, [currentUser._id]);
 
-  // Search with Trie (300ms debounce)
+  // Search with debounce
   const handleSearch = (val) => {
     setSearch(val);
     clearTimeout(searchTimer.current);
