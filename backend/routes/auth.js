@@ -25,7 +25,12 @@ class TTLStore {
   set(k, v){ this.map.set(this._key(k), { v, otp: null, attempts: 0, exp: Date.now() + this.ttlMs }); }
   get(k)   { const e = this.map.get(this._key(k)); if (!e || Date.now() > e.exp) { this.map.delete(this._key(k)); return null; } return e; }
   del(k)   { this.map.delete(this._key(k)); }
-  setOtp(k, otp) { const e = this.get(k); if (e) { e.otp = otp; e.exp = Date.now() + this.ttlMs; e.attempts = 0; } }
+  setOtp(k, otp) {
+    const e = this.get(k);
+    if (!e) return false;  // entry expired — caller should handle
+    e.otp = otp; e.exp = Date.now() + this.ttlMs; e.attempts = 0;
+    return true;
+  }
   checkOtp(k, otp) {
     const e = this.get(k); if (!e) return { ok: false, reason: "expired" };
     e.attempts++;
@@ -132,7 +137,10 @@ router.post("/verify-otp", async (req, res) => {
     const { email, otp } = req.body;
     if (!email||!otp) return res.status(400).json({ msg: "Email and code required" });
 
-    const result = pendingStore.checkOtp(email, otp);
+    // ── ALWAYS normalize before any store lookup ──
+    const el = String(email).toLowerCase().trim();
+
+    const result = pendingStore.checkOtp(el, otp);
     if (!result.ok) {
       if (result.reason === "expired")  return res.status(400).json({ msg: "Code expired. Please register again." });
       if (result.reason === "toomany")  return res.status(429).json({ msg: "Too many attempts. Register again." });
@@ -142,14 +150,14 @@ router.post("/verify-otp", async (req, res) => {
 
     const ud  = result.data;
     const dup = await User.findOne({ $or:[{ email:ud.email },{ username:ud.username }] });
-    if (dup) { pendingStore.del(email); return res.status(400).json({ msg: "Account already exists. Please login." }); }
+    if (dup) { pendingStore.del(el); return res.status(400).json({ msg: "Account already exists. Please login." }); }
 
     const user = await User.create({
       firstName:ud.firstName, middleName:ud.middleName||"", lastName:ud.lastName,
       username:ud.username, email:ud.email, password:ud.password,
       dob:ud.dob, age:ud.age, isVerified:true, isAdmin:ud.isAdmin||false,
     });
-    pendingStore.del(email);
+    pendingStore.del(el);
 
     const token = signJWT(user._id);
     res.json({ msg:"Account created! Welcome 🎉", token, user: userView(user) });
@@ -162,12 +170,13 @@ router.post("/verify-otp", async (req, res) => {
 router.post("/resend-otp", async (req, res) => {
   try {
     const { email } = req.body;
-    const entry = pendingStore.get(email);
+    const el = String(email||"").toLowerCase().trim();
+    const entry = pendingStore.get(el);
     if (!entry) return res.status(400).json({ msg: "No pending registration. Please register again." });
     const otp = genOTP();
-    pendingStore.setOtp(email, otp);
-    console.log(` RESEND OTP for ${email}: ${otp}`);
-    const sent = await mailer.send(email, "Your new ChatSphere code", mailer.otpHtml(entry.v.firstName, otp, "verify"));
+    pendingStore.setOtp(el, otp);
+    console.log(` RESEND OTP for ${el}: ${otp}`);
+    const sent = await mailer.send(el, "Your new ChatSphere code", mailer.otpHtml(entry.v.firstName, otp, "verify"));
     res.json({ msg: sent ? "New code sent!" : `Dev OTP: ${otp}`, devOtp: process.env.NODE_ENV !== "production" ? otp : undefined });
   } catch (e) { res.status(500).json({ msg: "Server error: " + e.message }); }
 });
@@ -208,11 +217,12 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email?.trim()) return res.status(400).json({ msg: "Email required" });
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const el = email.toLowerCase().trim();
+    const user = await User.findOne({ email: el });
     if (!user) return res.json({ msg: "If that email is registered, a code has been sent." });
     const otp = genOTP();
-    resetStore.set(email.toLowerCase(), { userId: user._id.toString(), email: user.email });
-    resetStore.setOtp(email.toLowerCase(), otp);
+    resetStore.set(el, { userId: user._id.toString(), email: user.email });
+    resetStore.setOtp(el, otp);
     console.log(` RESET OTP for ${user.email}: ${otp}`);
     await mailer.send(user.email, "Reset your ChatSphere password", mailer.otpHtml(user.firstName, otp, "reset"));
     res.json({ msg: "Reset code sent to your email." });
@@ -225,7 +235,8 @@ router.post("/forgot-password", async (req, res) => {
 router.post("/verify-reset-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const result = resetStore.checkOtp(email, otp);
+    const el = String(email||"").toLowerCase().trim();
+    const result = resetStore.checkOtp(el, otp);
     if (!result.ok) {
       if (result.reason === "expired") return res.status(400).json({ msg: "Code expired. Request a new one." });
       if (result.reason === "toomany") return res.status(429).json({ msg: "Too many attempts. Request new code." });
