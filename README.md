@@ -170,15 +170,7 @@ cd backend
 npm install
 ```
 
-Create `backend/.env`:
-```env
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=my_super_secret
-CHAT_SECRET=chatsphere_e2e_secret_2024
-RESEND_API_KEY=your_resend_api_key
-PORT=5000
-NODE_ENV=development
-```
+Create `backend/.env`
 
 Start backend:
 ```bash
@@ -191,18 +183,14 @@ cd frontend
 npm install
 ```
 
-Create `frontend/.env`:
-```env
-VITE_API_URL=http://localhost:5000
-VITE_CHAT_SECRET=chatsphere_e2e_secret_2024
-```
+Create `frontend/.env`
 
 Start frontend:
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+Open [http://localhost:](http://localhost:)
 
 ---
 
@@ -222,11 +210,7 @@ Open [http://localhost:5173](http://localhost:5173)
 ### Frontend → Vercel
 1. Connect GitHub repo to Vercel
 2. Set **Root Directory** to `frontend`
-3. Add environment variables:
-   - `VITE_API_URL=https://your-backend.onrender.com`
-   - `VITE_CHAT_SECRET=chatsphere_e2e_secret_2024`
-
----
+3. Add environment variables
 
 ## 🔒 Encryption
 
