@@ -5,7 +5,6 @@
 A full-stack real-time chat application with end-to-end encryption, voice/video calls, group chats, social features, and more — built with the MERN stack and Socket.IO.
 
 🌐 **Live:** [chatsphere-omega.vercel.app](https://chatsphere-omega.vercel.app)
-🔧 **Backend:** [chatsphere-backend-s3en.onrender.com](https://chatsphere-backend-s3en.onrender.com)
 
 ---
 
