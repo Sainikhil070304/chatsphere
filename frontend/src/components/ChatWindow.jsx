@@ -48,10 +48,10 @@ function VoicePlayer({ src, isMe }) {
   };
 
   const pct = duration > 0 ? current / duration : 0;
-  const filled   = isMe ? "rgba(255,255,255,0.9)"  : "#a78bfa";
-  const unfilled = isMe ? "rgba(255,255,255,0.28)" : "rgba(167,139,250,0.28)";
-  const btnBg    = isMe ? "rgba(255,255,255,0.18)" : "rgba(124,107,250,0.18)";
-  const btnIcon  = isMe ? "#fff" : "#a78bfa";
+  const filled   = isMe ? "rgba(255,255,255,0.9)"  : "#a29bfe";
+  const unfilled = isMe ? "rgba(255,255,255,0.28)" : "rgba(162,155,254,0.28)";
+  const btnBg    = isMe ? "rgba(255,255,255,0.18)" : "rgba(108,92,231,0.18)";
+  const btnIcon  = isMe ? "#fff" : "#a29bfe";
   const timeTxt  = isMe ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.4)";
   const activeBars = Math.round(pct * BARS.length);
 
@@ -63,7 +63,7 @@ function VoicePlayer({ src, isMe }) {
         onEnded={() => { setPlaying(false); setCurrent(0); if(audioRef.current) audioRef.current.currentTime=0; }}
       />
       <div style={{ width:38, height:38, borderRadius:"50%", flexShrink:0,
-        background: isMe ? "rgba(255,255,255,0.12)" : "rgba(124,107,250,0.15)",
+        background: isMe ? "rgba(255,255,255,0.12)" : "rgba(108,92,231,0.15)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={btnIcon} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -338,27 +338,40 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
   );
 
   const hdrBtn = (extraStyle={}) => ({
-    width:36, height:36, borderRadius:"50%",
-    border:"1px solid rgba(255,255,255,.1)",
-    background:"rgba(255,255,255,.05)",
-    cursor:"pointer", display:"flex", alignItems:"center",
-    justifyContent:"center", color:"rgba(255,255,255,.7)",
-    transition:"all .2s", marginLeft:4, ...extraStyle,
+    width: 36, height: 36, borderRadius: "50%",
+    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(255,255,255,.04)",
+    cursor: "pointer", display: "flex", alignItems: "center",
+    justifyContent: "center", color: "rgba(255,255,255,.6)",
+    transition: "all .2s", marginLeft: 4,
+    flexShrink: 0,
+    ...extraStyle,
   });
 
   return (
-    <div className="chat" onClick={() => setCtxMenu(null)}
-      style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
-
-      {/* Header */}
-      <div className="chat-header">
-        {/* ── Back button — mobile only ── */}
+    // ── CRITICAL iOS FIX: position absolute + inset:0 instead of flex height ──
+    <div
+      onClick={() => setCtxMenu(null)}
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: "var(--bg)",
+      }}
+    >
+      {/* ── Header ── */}
+      <div
+        className="chat-header"
+        style={{ flexShrink: 0 }}
+      >
         {isMobile && onBack && (
           <button onClick={onBack} style={{
             width: 34, height: 34, borderRadius: "50%", border: "none",
-            background: "rgba(255,255,255,0.07)", color: "#fff",
+            background: "rgba(255,255,255,0.06)", color: "#fff",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", flexShrink: 0, marginRight: 2,
+            cursor: "pointer", flexShrink: 0, marginRight: 4,
             transition: "background .2s",
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -366,11 +379,14 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
             </svg>
           </button>
         )}
-        <div className={`chat-header-avatar ${isGroup?"group-hav":""}`}
-          style={{cursor:isGroup?"pointer":"default"}}
-          onClick={() => isGroup && setShowInfo(s=>!s)}>
+
+        <div
+          className={`chat-header-avatar ${isGroup ? "group-hav" : ""}`}
+          style={{ cursor: isGroup ? "pointer" : "default" }}
+          onClick={() => isGroup && setShowInfo(s => !s)}
+        >
           {!isGroup && user.avatar
-            ? <img src={imgSrc(user.avatar)} alt=""/>
+            ? <img src={imgSrc(user.avatar)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/>
             : isGroup
               ? (groupData?.avatar
                   ? <img src={imgSrc(groupData.avatar)} alt="" style={{width:"100%",height:"100%",borderRadius:"50%",objectFit:"cover"}}/>
@@ -380,65 +396,59 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
           {isOnline && <div className="online-dot"/>}
         </div>
 
-        <div style={{flex:1}}>
-          <div className="chat-header-name"
-            style={{cursor:!isGroup?"pointer":"default"}}
-            onClick={() => !isGroup && onViewProfile && onViewProfile(user)}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            className="chat-header-name"
+            style={{ cursor: !isGroup ? "pointer" : "default" }}
+            onClick={() => !isGroup && onViewProfile && onViewProfile(user)}
+          >
             {displayName}
-            {!isGroup && <span style={{fontSize:12,color:"var(--accent2)",fontWeight:400,marginLeft:6}}>profile</span>}
+            {!isGroup && (
+              <span style={{ fontSize: 12, color: "var(--accent2)", fontWeight: 400, marginLeft: 6 }}>profile</span>
+            )}
           </div>
           <div className="chat-header-status">
             {isGroup
-              ? `${members.length} members · ${isAdmin?"You are admin":"Click avatar for info"}`
-              : `${isOnline?"Active now":"Offline"}${user.username?` · @${user.username}`:""} · E2E`}
+              ? `${members.length} members · ${isAdmin ? "You are admin" : "Click avatar for info"}`
+              : `${isOnline ? "Active now" : "Offline"}${user.username ? ` · @${user.username}` : ""} · E2E`}
           </div>
         </div>
 
         {!isGroup && (<>
           <button style={hdrBtn()} title="Voice call"
-            onClick={() => onStartCall && onStartCall(user,"voice")}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,.25)";e.currentTarget.style.color="#a78bfa";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+            onClick={() => onStartCall && onStartCall(user, "voice")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.27 15z"/></svg>
           </button>
           <button style={hdrBtn()} title="Video call"
-            onClick={() => onStartCall && onStartCall(user,"video")}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,.25)";e.currentTarget.style.color="#a78bfa";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+            onClick={() => onStartCall && onStartCall(user, "video")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
           </button>
-          <button style={hdrBtn()} title="Clear chat (only for you)" onClick={clearChat}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(239,68,68,.2)";e.currentTarget.style.color="#ef4444";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+          <button style={hdrBtn()} title="Clear chat" onClick={clearChat}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           </button>
         </>)}
 
         {isGroup && (<>
           <button style={hdrBtn()} title="Group voice call"
-            onClick={() => onStartCall && onStartCall(user, "voice")}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,.25)";e.currentTarget.style.color="#a78bfa";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+            onClick={() => onStartCall && onStartCall(user, "voice")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.27 15z"/></svg>
           </button>
-          <button style={hdrBtn()} title="Group info" onClick={() => setShowInfo(s=>!s)}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,.25)";e.currentTarget.style.color="#a78bfa";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+          <button style={hdrBtn()} title="Group info" onClick={() => setShowInfo(s => !s)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </button>
         </>)}
       </div>
 
-      {/* Group info panel */}
+      {/* ── Group info panel ── */}
       {isGroup && showInfo && (
-        <div className="group-info-panel">
+        <div className="group-info-panel" style={{ flexShrink: 0 }}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
               <div style={{position:"relative",flexShrink:0}}>
                 <div style={{ width:54,height:54,borderRadius:"50%",overflow:"hidden",
-                  background:"linear-gradient(135deg,#7c3aed,#4f46e5)",
+                  background:"linear-gradient(135deg,#6c5ce7,#a29bfe)",
                   display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,
-                  border:"2px solid rgba(255,255,255,0.1)" }}>
+                  border:"2px solid rgba(255,255,255,0.08)" }}>
                   {groupData?.avatar
                     ? <img src={imgSrc(groupData.avatar)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                     : "👥"}
@@ -446,7 +456,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
                 {isAdmin && (
                   <button onClick={() => groupPhotoRef.current?.click()} title="Change group photo"
                     style={{ position:"absolute",bottom:-2,right:-2,width:22,height:22,borderRadius:"50%",
-                      background:"#7c6bfa",border:"2px solid #080b14",
+                      background:"#6c5ce7",border:"2px solid #06080f",
                       cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0 }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -504,28 +514,50 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
         </div>
       )}
 
-      {/* Messages */}
-      <div className="messages" style={{ WebkitOverflowScrolling: "touch", overflowY: "auto", flex: 1, minHeight: 0 }}>
-        {list.map((m,i) => {
-          if (m.type==="sep") return <div key={`s${i}`} className="date-sep"><span>{m.label}</span></div>;
+      {/* ── Messages — CRITICAL: flex:1 + min-height:0 + overflow-y:auto ── */}
+      <div
+        className="messages"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          // iOS Safari keyboard fix
+          paddingBottom: 8,
+        }}
+      >
+        {list.map((m, i) => {
+          if (m.type === "sep") return (
+            <div key={`s${i}`} className="date-sep"><span>{m.label}</span></div>
+          );
           return (
-            <div key={m._id||i} className={`bubble ${m.me?"me":"them"} ${m.unsent?"unsent-bubble":""}`}
-              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(m.me&&m._id&&!m.unsent)setCtxMenu({msgId:m._id,x:e.clientX,y:e.clientY,time:m.time});}}>
-              {isGroup && !m.me && m.senderName && <div className="bubble-sender">{m.senderName}</div>}
+            <div
+              key={m._id || i}
+              className={`bubble ${m.me ? "me" : "them"} ${m.unsent ? "unsent-bubble" : ""}`}
+              onContextMenu={e => {
+                e.preventDefault(); e.stopPropagation();
+                if (m.me && m._id && !m.unsent)
+                  setCtxMenu({ msgId: m._id, x: e.clientX, y: e.clientY, time: m.time });
+              }}
+            >
+              {isGroup && !m.me && m.senderName && (
+                <div className="bubble-sender">{m.senderName}</div>
+              )}
               {m.unsent
                 ? <div className="bubble-text" style={{opacity:.5,fontStyle:"italic"}}>Message unsent</div>
-                : m.type==="image"
-                  ? <img src={imgSrc(m.text)} alt="" className="chat-image" onClick={()=>window.open(imgSrc(m.text),"_blank")}/>
-                  : m.type==="audio"
-                    ? <VoicePlayer src={imgSrc(m.text)} isMe={m.me} />
-                    : m.type==="file"
+                : m.type === "image"
+                  ? <img src={imgSrc(m.text)} alt="" className="chat-image" onClick={() => window.open(imgSrc(m.text), "_blank")}/>
+                  : m.type === "audio"
+                    ? <VoicePlayer src={imgSrc(m.text)} isMe={m.me}/>
+                    : m.type === "file"
                       ? <a href={imgSrc(m.fileInfo?.url)} target="_blank" rel="noreferrer" className="file-bubble">
                           <div className="file-info">
-                            <div className="file-name">{m.fileInfo?.name||"File"}</div>
+                            <div className="file-name">{m.fileInfo?.name || "File"}</div>
                             <div className="file-size">{fmtSize(m.fileInfo?.size)} · Click to open</div>
                           </div>
                         </a>
-                      : m.type==="post"
+                      : m.type === "post"
                         ? (() => {
                             try {
                               const raw = m.text || "";
@@ -536,7 +568,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                                     Shared a post
                                   </div>
-                                  <div style={{ borderRadius:10, overflow:"hidden", border:"1px solid rgba(255,255,255,.1)", background:"rgba(255,255,255,.04)" }}>
+                                  <div style={{ borderRadius:10, overflow:"hidden", border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)" }}>
                                     {d.mediaUrl && (
                                       <img src={imgSrc(d.mediaUrl)} alt="" style={{ width:"100%", maxHeight:160, objectFit:"cover", display:"block" }}
                                         onClick={() => window.open(imgSrc(d.mediaUrl),"_blank")} />
@@ -552,31 +584,50 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
                           })()
                         : <div className="bubble-text">{m.text}</div>
               }
-              {!m.unsent && <div className="bubble-time">{fmt(m.time)}{m.me&&" ✔✔"}</div>}
+              {!m.unsent && (
+                <div className="bubble-time">{fmt(m.time)}{m.me && " ✔✔"}</div>
+              )}
             </div>
           );
         })}
-        {typing && <div className="typing-indicator"><span/><span/><span/></div>}
+        {typing && (
+          <div className="typing-indicator">
+            <div className="typing-dots"><span/><span/><span/></div>
+          </div>
+        )}
         <div ref={bottomRef}/>
       </div>
 
-      {/* Context menu */}
+      {/* ── Context menu ── */}
       {ctxMenu && (
         <div className="ctx-menu" style={{position:"fixed",left:ctxMenu.x,top:ctxMenu.y,zIndex:999}} onClick={e=>e.stopPropagation()}>
           {canUnsend(ctxMenu.time)
-            ? <button onClick={()=>unsendMsg(ctxMenu.msgId,ctxMenu.time)}>Unsend</button>
+            ? <button onClick={() => unsendMsg(ctxMenu.msgId, ctxMenu.time)}>Unsend</button>
             : <button disabled style={{opacity:.45,cursor:"not-allowed"}}>1 hour limit passed</button>
           }
-          <button onClick={()=>setCtxMenu(null)} style={{color:"var(--muted)"}}>Cancel</button>
+          <button onClick={() => setCtxMenu(null)} style={{color:"var(--muted)"}}>Cancel</button>
         </div>
       )}
 
-      {/* Input bar */}
-      <div className="input-bar" style={{ flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        <input ref={fileRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.zip" style={{display:"none"}} onChange={sendFile}/>
+      {/* ── Input bar ── */}
+      <div
+        className="input-bar"
+        style={{
+          flexShrink: 0,
+          // CRITICAL iOS fix: pad for home bar
+          paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+        }}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,video/*,.pdf,.doc,.docx,.zip"
+          style={{display:"none"}}
+          onChange={sendFile}
+        />
 
         {!recording && (
-          <button className="ib-btn" title="Photo / File" onClick={()=>fileRef.current.click()}>
+          <button className="ib-btn" title="Photo / File" onClick={() => fileRef.current.click()}>
             {uploading
               ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -594,7 +645,7 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
             <span className="rec-time">
               {String(Math.floor(recSecs/60)).padStart(2,"0")}:{String(recSecs%60).padStart(2,"0")}
             </span>
-            <button className="rec-stop" onMouseUp={stopRecording} onTouchEnd={stopRecording} title="Stop & send">
+            <button className="rec-stop" onMouseUp={stopRecording} onTouchEnd={stopRecording}>
               <svg width="9" height="9" viewBox="0 0 10 10" fill="#fff"><rect width="10" height="10" rx="2"/></svg>
             </button>
           </div>
@@ -605,8 +656,14 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
             value={msg}
             placeholder={recording ? `Recording... ${recSecs}s` : `Message ${displayName}...`}
             disabled={recording}
-            onChange={e=>{setMsg(e.target.value);socket.emit("typing",isGroup?{groupId:user.chatId,userId:meRef.current._id}:user._id);}}
-            onKeyDown={e=>e.key==="Enter"&&send()}
+            onChange={e => {
+              setMsg(e.target.value);
+              socket.emit("typing", isGroup
+                ? {groupId: user.chatId, userId: meRef.current._id}
+                : user._id
+              );
+            }}
+            onKeyDown={e => e.key === "Enter" && send()}
           />
           {!msg.trim() && !recording && (
             <button className="ib-mic" title="Hold to record"
@@ -623,7 +680,10 @@ export default function ChatWindow({ user, currentUser, onlineUsers=[], onViewPr
 
         {msg.trim() || recording ? (
           <button className="ib-send" onClick={send} disabled={recording}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
           </button>
         ) : (
           <button className="ib-btn" title="Camera">
