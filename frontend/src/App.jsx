@@ -18,12 +18,22 @@ import {
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-// Handles base64, full URLs, and relative paths
 const imgSrc = (s) => {
   if (!s) return "";
   if (s.startsWith("data:") || s.startsWith("http")) return s;
   return `${BASE}${s}`;
 };
+
+// ── Detect mobile (≤ 640px) ──────────────────────────────────
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 640);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth <= 640);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
 
 export default function App() {
   const [user,           setUser]        = useState(null);
@@ -34,7 +44,10 @@ export default function App() {
   const [viewingProfile, setViewing]     = useState(null);
   const [activeCall,     setActiveCall]  = useState(null);
   const [incomingCall,   setIncoming]    = useState(null);
+  // Mobile: track whether chat window is open (full screen)
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const incomingRef = useRef(null);
+  const isMobile    = useIsMobile();
 
   useEffect(() => {
     const saved = localStorage.getItem("me");
@@ -52,7 +65,7 @@ export default function App() {
     const onOnline  = id => setOnlineUsers(p => [...new Set([...p, String(id)])]);
     const onOffline = id => setOnlineUsers(p => p.filter(u => u !== String(id)));
     const onConnect = () => {
-      const me = JSON.parse(localStorage.getItem("me")||"null");
+      const me = JSON.parse(localStorage.getItem("me") || "null");
       if (me) { socket.emit("online", me._id); socket.emit("getOnline"); }
     };
     const onIncomingCall = (data) => {
@@ -90,7 +103,8 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("me");
-    setUser(null); setChat(null); setView("chat"); setOnlineUsers([]);
+    setUser(null); setChat(null); setView("chat");
+    setOnlineUsers([]); setMobileChatOpen(false);
   };
 
   const handleViewProfile = (chatUser) => {
@@ -100,14 +114,28 @@ export default function App() {
   const handleStartChatFromProfile = async (profileUser) => {
     const API = (await import("./services/api")).default;
     const res = await API.post("/chat/create", { userId: profileUser._id });
-    setChat({
+    const chatObj = {
       _id: profileUser._id,
       name: [profileUser.firstName, profileUser.lastName].filter(Boolean).join(" ") || profileUser.username,
       username: profileUser.username,
       avatar: profileUser.avatar,
       chatId: res.data._id,
-    });
+    };
+    setChat(chatObj);
     setView("chat");
+    if (isMobile) setMobileChatOpen(true);
+  };
+
+  // When a chat is opened — on mobile, slide to full-screen chat
+  const handleOpenChat = (chatObj) => {
+    setChat(chatObj);
+    if (isMobile) setMobileChatOpen(true);
+  };
+
+  // Back from chat window on mobile
+  const handleMobileBack = () => {
+    setMobileChatOpen(false);
+    setChat(null);
   };
 
   const startCall = (targetUser, callType) => {
@@ -122,7 +150,6 @@ export default function App() {
     if (!incoming) return;
     stopAllSounds();
     resumeAudio();
-    // Tell server we accepted — server will send us the stored offer
     socket.emit("call:accept", { from: incoming.from });
     setActiveCall({
       peer: {
@@ -169,9 +196,160 @@ export default function App() {
     </div>
   );
 
+  // ── Mobile layout ─────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="app" style={{
+        position: "fixed", inset: 0,
+        overflow: "hidden",
+        height: "100%",
+        // iOS Safari fix: use fill-available so address bar doesn't eat space
+        minHeight: "-webkit-fill-available",
+      }}>
+
+        {/* ── Sidebar (always visible on mobile, left strip) ── */}
+        <div className="sidebar">
+          <div className="sidebar-top">
+            <div className="brand-mini">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c6bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+          </div>
+          <div className="nav-icons">
+            <button className={`nav-icon ${view==="chat"?"active":""}`}
+              onClick={() => { setView("chat"); setMobileChatOpen(false); }} title="Messages">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button className={`nav-icon ${view==="feed"?"active":""}`}
+              onClick={() => { setView("feed"); setMobileChatOpen(false); }} title="Feed">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </button>
+            <button className={`nav-icon ${view==="profile"?"active":""}`}
+              onClick={() => { setView("profile"); setMobileChatOpen(false); }} title="My Profile">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </button>
+            {user.isAdmin && (
+              <button className={`nav-icon ${view==="admin"?"active":""}`}
+                onClick={() => { setView("admin"); setMobileChatOpen(false); }} title="Admin">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </button>
+            )}
+          </div>
+          <div className="nav-bottom">
+            <div className="user-avatar-mini" onClick={() => { setView("profile"); setMobileChatOpen(false); }} title="My Profile">
+              {user.avatar
+                ? <img src={imgSrc(user.avatar)} alt=""
+                    onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+                  />
+                : null
+              }
+              <span style={{
+                display: user.avatar ? "none" : "flex",
+                width:"100%", height:"100%",
+                alignItems:"center", justifyContent:"center",
+                fontSize:14, fontWeight:700, color:"#fff",
+              }}>
+                {(user.firstName || user.username || "?")[0].toUpperCase()}
+              </span>
+              <div className="online-ring" />
+            </div>
+            <button className="logout-btn" onClick={handleLogout} title="Logout">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Main panel (everything except sidebar) ── */}
+        <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
+
+          {/* Chat view — list is always rendered, window slides over it */}
+          {view === "chat" && (
+            <>
+              {/* ChatList — always mounted so socket stays alive */}
+              <div style={{
+                position: "absolute", inset: 0,
+                transform: mobileChatOpen ? "translateX(-100%)" : "translateX(0)",
+                transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
+                willChange: "transform",
+                display: "flex", flexDirection: "column",
+                background: "var(--bg)",
+              }}>
+                <ChatList
+                  open={handleOpenChat}
+                  currentUser={user}
+                  onlineUsers={onlineUsers}
+                  socket={socket}
+                />
+              </div>
+
+              {/* ChatWindow — always mounted so iOS doesn't get a blank render frame.
+                  Slides in from right when mobileChatOpen=true, hidden off-screen otherwise */}
+              <div style={{
+                position: "absolute", inset: 0,
+                transform: mobileChatOpen ? "translateX(0)" : "translateX(100%)",
+                transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
+                willChange: "transform",
+                display: "flex", flexDirection: "column",
+                background: "var(--bg)",
+                zIndex: 5,
+                visibility: mobileChatOpen ? "visible" : "hidden",
+                pointerEvents: mobileChatOpen ? "auto" : "none",
+              }}>
+                {chat && (
+                  <ChatWindow
+                    key={chat.chatId}
+                    user={chat}
+                    currentUser={user}
+                    onlineUsers={onlineUsers}
+                    onViewProfile={handleViewProfile}
+                    onStartCall={startCall}
+                    onBack={handleMobileBack}
+                    isMobile={true}
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {view === "feed"        && <Feed currentUser={user} />}
+          {view === "profile"     && <Profile user={user} setUser={updateUser} onBack={() => setView("chat")} />}
+          {view === "admin"       && user.isAdmin && <AdminPanel onBack={() => setView("chat")} />}
+          {view === "userprofile" && (
+            <UserProfile
+              username={viewingProfile}
+              currentUser={user}
+              onBack={() => setView("chat")}
+              onStartChat={handleStartChatFromProfile}
+            />
+          )}
+        </div>
+
+        {/* Calls */}
+        {activeCall && (
+          <Call
+            peer={activeCall.peer}
+            isVideo={activeCall.isVideo}
+            isCaller={activeCall.isCaller}
+            currentUser={user}
+            onEnd={() => setActiveCall(null)}
+          />
+        )}
+        <IncomingCallBanner
+          call={incomingCall && !activeCall ? {
+            callerName: incomingCall.fromName || incomingCall.callerName || "Someone",
+            isVideo: incomingCall.callType === "video" || incomingCall.isVideo,
+          } : null}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
+      </div>
+    );
+  }
+
+  // ── Desktop layout (unchanged) ────────────────────────────────
   return (
     <div className="app">
-      {/* ── Sidebar ── */}
       <div className="sidebar">
         <div className="sidebar-top">
           <div className="brand-mini">
@@ -206,9 +384,9 @@ export default function App() {
             }
             <span style={{
               display: user.avatar ? "none" : "flex",
-              width: "100%", height: "100%",
-              alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: 700, color: "#fff",
+              width:"100%", height:"100%",
+              alignItems:"center", justifyContent:"center",
+              fontSize:14, fontWeight:700, color:"#fff",
             }}>
               {(user.firstName || user.username || "?")[0].toUpperCase()}
             </span>
@@ -220,12 +398,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Main content ── */}
       {view === "chat" && (
         <>
           <ChatList open={setChat} currentUser={user} onlineUsers={onlineUsers} socket={socket} />
           {chat
-            ? <ChatWindow key={chat.chatId} user={chat} currentUser={user} onlineUsers={onlineUsers} onViewProfile={handleViewProfile} onStartCall={startCall} />
+            ? <ChatWindow
+                key={chat.chatId}
+                user={chat}
+                currentUser={user}
+                onlineUsers={onlineUsers}
+                onViewProfile={handleViewProfile}
+                onStartCall={startCall}
+              />
             : <div className="empty-chat">
                 <div className="empty-inner">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -250,7 +434,6 @@ export default function App() {
           onEnd={() => setActiveCall(null)}
         />
       )}
-
       <IncomingCallBanner
         call={incomingCall && !activeCall ? {
           callerName: incomingCall.fromName || incomingCall.callerName || "Someone",

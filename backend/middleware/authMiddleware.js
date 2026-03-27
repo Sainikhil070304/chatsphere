@@ -1,10 +1,15 @@
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "chatsphere_jwt_secret_2024";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 module.exports = (req, res, next) => {
-  const token = req.headers.authorization;
-  if (!token) return res.status(401).json({ msg: "No token" });
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ msg: "No token" });
+  
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : authHeader;
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;

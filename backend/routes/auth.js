@@ -6,7 +6,7 @@ const User     = require("../models/User");
 const mongoose = require("mongoose");
 const https    = require("https");  // built-in, no install needed
 
-const JWT_SECRET  = process.env.JWT_SECRET  || "chatsphere_jwt_secret_2024";
+const JWT_SECRET  = process.env.JWT_SECRET ;
 const ADMIN_EMAIL = "sainikhil0918@gmail.com";
 
 // ════════════════════════════════════════════════════════════

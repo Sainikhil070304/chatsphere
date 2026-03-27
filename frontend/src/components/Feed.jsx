@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import API from "../services/api";
 
-const imgSrc = s => s?.startsWith("http") ? s : `http://localhost:5000${s}`;
+// Fix: use env variable instead of hardcoded localhost
+const BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace("/api", "")
+  : "http://localhost:5000";
+
+const imgSrc = s => {
+  if (!s) return "";
+  if (s.startsWith("http") || s.startsWith("data:")) return s;
+  return `${BASE}${s}`;
+};
+
 const timeAgo = t => {
   const s = Math.floor((Date.now() - new Date(t)) / 1000);
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 60)    return `${s}s ago`;
+  if (s < 3600)  return `${Math.floor(s/60)}m ago`;
   if (s < 86400) return `${Math.floor(s/3600)}h ago`;
   return `${Math.floor(s/86400)}d ago`;
 };
@@ -42,13 +52,12 @@ function HeartBurst({ onDone }) {
 
 // ── In-app Share Sheet (Instagram style) ───────────────────────
 function ShareSheet({ post, currentUser, onClose }) {
-  const [chats,    setChats]    = useState([]);
-  const [sending,  setSending]  = useState(null);   // chatId being sent to
-  const [sent,     setSent]     = useState({});      // { chatId: true }
-  const [search,   setSearch]   = useState("");
+  const [chats,   setChats]   = useState([]);
+  const [sending, setSending] = useState(null);
+  const [sent,    setSent]    = useState({});
+  const [search,  setSearch]  = useState("");
 
   useEffect(() => {
-    // Load DM chats
     API.get("/chat").then(r => {
       const list = (r.data || []).map(c => {
         const other = c.members?.find(m => String(m._id) !== String(currentUser._id));
@@ -56,7 +65,6 @@ function ShareSheet({ post, currentUser, onClose }) {
       });
       setChats(list);
     }).catch(() => {});
-    // Load groups
     API.get("/groups").then(r => {
       const groups = (r.data || []).map(g => ({ chatId: g._id, name: g.name, avatar: g.avatar, isGroup: true, _id: g._id }));
       setChats(prev => [...prev, ...groups]);
@@ -67,12 +75,10 @@ function ShareSheet({ post, currentUser, onClose }) {
     if (sent[chat.chatId]) return;
     setSending(chat.chatId);
     try {
-      // Build a rich post-share message
-      const caption = post.caption ? `"${post.caption.slice(0,80)}${post.caption.length>80?"…":""}"` : "";
+      const caption    = post.caption ? `"${post.caption.slice(0,80)}${post.caption.length>80?"…":""}"` : "";
       const authorName = [post.author?.firstName, post.author?.lastName].filter(Boolean).join(" ") || post.author?.username || "Someone";
-      const mediaNote = post.media?.length > 0 ? (post.media[0]?.type === "video" ? " [Video]" : " [Photo]") : "";
+      const mediaNote  = post.media?.length > 0 ? (post.media[0]?.type === "video" ? " [Video]" : " [Photo]") : "";
       const text = `POST:${JSON.stringify({ postId: post._id, author: authorName, caption, mediaUrl: post.media?.[0]?.url || "", mediaNote })}`;
-
       await API.post(
         chat.isGroup ? "/groups/message" : "/chat",
         chat.isGroup
@@ -97,16 +103,9 @@ function ShareSheet({ post, currentUser, onClose }) {
         border:"1px solid rgba(255,255,255,.08)",
         boxShadow:"0 -8px 40px rgba(0,0,0,.5)",
       }} onClick={e => e.stopPropagation()}>
-
-        {/* Handle */}
         <div style={{ width:40, height:4, borderRadius:2, background:"rgba(255,255,255,.2)", margin:"12px auto 0" }}/>
-
-        {/* Header */}
         <div style={{ padding:"14px 20px 10px", borderBottom:"1px solid rgba(255,255,255,.07)" }}>
-          <div style={{ fontSize:15, fontWeight:700, color:"#fff", textAlign:"center", marginBottom:12 }}>
-            Share to…
-          </div>
-          {/* Search */}
+          <div style={{ fontSize:15, fontWeight:700, color:"#fff", textAlign:"center", marginBottom:12 }}>Share to…</div>
           <div style={{ position:"relative" }}>
             <svg style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", opacity:.4 }}
               width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -120,8 +119,6 @@ function ShareSheet({ post, currentUser, onClose }) {
             />
           </div>
         </div>
-
-        {/* Post preview */}
         <div style={{ margin:"12px 16px", padding:"10px 12px", borderRadius:12,
           background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.06)",
           display:"flex", gap:10, alignItems:"center" }}>
@@ -142,46 +139,26 @@ function ShareSheet({ post, currentUser, onClose }) {
             </div>
           </div>
         </div>
-
-        {/* Chat list */}
         <div style={{ overflowY:"auto", flex:1, padding:"0 12px" }}>
           {filtered.length === 0 && (
-            <div style={{ textAlign:"center", padding:"32px 0", color:"rgba(255,255,255,.3)", fontSize:13 }}>
-              No chats found
-            </div>
+            <div style={{ textAlign:"center", padding:"32px 0", color:"rgba(255,255,255,.3)", fontSize:13 }}>No chats found</div>
           )}
           {filtered.map(chat => {
             const isSent    = sent[chat.chatId];
             const isSending = sending === chat.chatId;
             return (
-              <div key={chat.chatId} style={{
-                display:"flex", alignItems:"center", gap:12,
-                padding:"10px 8px", borderRadius:12, cursor:"pointer",
-                transition:"background .15s",
-              }}
+              <div key={chat.chatId} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 8px", borderRadius:12, cursor:"pointer", transition:"background .15s" }}
                 onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,.05)"}
                 onMouseLeave={e => e.currentTarget.style.background="transparent"}
-                onClick={() => sendTo(chat)}
-              >
-                <div style={{ width:44, height:44, borderRadius:"50%", flexShrink:0,
-                  background:"linear-gradient(135deg,#7c3aed,#4f46e5)",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:18, fontWeight:700, color:"#fff", overflow:"hidden" }}>
-                  {chat.avatar
-                    ? <img src={imgSrc(chat.avatar)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
-                    : chat.isGroup ? "👥" : chat.name[0]?.toUpperCase()
-                  }
+                onClick={() => sendTo(chat)}>
+                <div style={{ width:44, height:44, borderRadius:"50%", flexShrink:0, background:"linear-gradient(135deg,#7c3aed,#4f46e5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, color:"#fff", overflow:"hidden" }}>
+                  {chat.avatar ? <img src={imgSrc(chat.avatar)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : chat.isGroup ? "👥" : chat.name[0]?.toUpperCase()}
                 </div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:14, fontWeight:600, color:"#fff" }}>{chat.name}</div>
                   <div style={{ fontSize:12, color:"rgba(255,255,255,.35)" }}>{chat.isGroup ? "Group" : "Direct message"}</div>
                 </div>
-                <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  background: isSent ? "rgba(34,197,94,.2)" : "rgba(108,99,255,.15)",
-                  border: `1.5px solid ${isSent ? "rgba(34,197,94,.5)" : "rgba(108,99,255,.3)"}`,
-                  transition:"all .2s",
-                }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background: isSent ? "rgba(34,197,94,.2)" : "rgba(108,99,255,.15)", border: `1.5px solid ${isSent ? "rgba(34,197,94,.5)" : "rgba(108,99,255,.3)"}`, transition:"all .2s" }}>
                   {isSending
                     ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation:"spin 1s linear infinite" }}><circle cx="12" cy="12" r="10"/></svg>
                     : isSent
@@ -193,14 +170,8 @@ function ShareSheet({ post, currentUser, onClose }) {
             );
           })}
         </div>
-
-        {/* Close */}
         <div style={{ padding:"12px 20px 0" }}>
-          <button onClick={onClose} style={{
-            width:"100%", padding:"13px", borderRadius:14, border:"none",
-            background:"rgba(255,255,255,.07)", color:"rgba(255,255,255,.6)",
-            fontWeight:600, fontSize:14, cursor:"pointer",
-          }}>Cancel</button>
+          <button onClick={onClose} style={{ width:"100%", padding:"13px", borderRadius:14, border:"none", background:"rgba(255,255,255,.07)", color:"rgba(255,255,255,.6)", fontWeight:600, fontSize:14, cursor:"pointer" }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -221,14 +192,12 @@ function PostCard({ post, currentUser, onDelete }) {
   const lastTap = useRef(0);
 
   const authorName = [post.author?.firstName, post.author?.lastName].filter(Boolean).join(" ") || post.author?.username || "User";
-  const isMe = String(post.author?._id) === String(currentUser._id);
+  const isMe       = String(post.author?._id) === String(currentUser._id);
   const mediaItems = post.media || [];
 
   const handleDoubleTap = () => {
     const now = Date.now();
-    if (now - lastTap.current < 300) {
-      if (!liked) { toggleLike(); setHeartBurst(true); }
-    }
+    if (now - lastTap.current < 300) { if (!liked) { toggleLike(); setHeartBurst(true); } }
     lastTap.current = now;
   };
 
@@ -255,15 +224,10 @@ function PostCard({ post, currentUser, onDelete }) {
     setComments(prev => prev.filter(c => String(c._id) !== commentId));
   };
 
-  const sharePost = () => {
-    setSharePulse(true);
-    setTimeout(() => setSharePulse(false), 400);
-    setShowShare(true);
-  };
+  const sharePost = () => { setSharePulse(true); setTimeout(() => setSharePulse(false), 400); setShowShare(true); };
 
   return (
     <div className="pc">
-      {/* Header */}
       <div className="pc-header">
         <Av src={post.author?.avatar} name={authorName} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -282,10 +246,8 @@ function PostCard({ post, currentUser, onDelete }) {
         )}
       </div>
 
-      {/* Caption */}
       {post.caption && <div className="pc-caption">{post.caption}</div>}
 
-      {/* Media carousel */}
       {mediaItems.length > 0 && (
         <div className="pc-media-wrap" onDoubleClick={handleDoubleTap} onClick={handleDoubleTap}>
           {heartBurst && <HeartBurst onDone={() => setHeartBurst(false)} />}
@@ -313,7 +275,6 @@ function PostCard({ post, currentUser, onDelete }) {
         </div>
       )}
 
-      {/* Actions */}
       <div className="pc-actions">
         <button className={`pc-btn like-btn ${liked ? "liked" : ""}`} onClick={toggleLike}>
           <svg width="22" height="22" viewBox="0 0 24 24"
@@ -335,7 +296,6 @@ function PostCard({ post, currentUser, onDelete }) {
           {comments.length > 0 && <span className="pc-count">{comments.length}</span>}
         </button>
 
-        {/* Share button — with pulse animation on click */}
         <button className="pc-btn" onClick={sharePost}
           style={{ transition: "all .2s", transform: sharePulse ? "scale(1.3)" : "scale(1)" }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -354,11 +314,10 @@ function PostCard({ post, currentUser, onDelete }) {
       {likes > 0 && <div className="pc-likes-label">{likes} {likes === 1 ? "like" : "likes"}</div>}
       {showShare && <ShareSheet post={post} currentUser={currentUser} onClose={() => setShowShare(false)} />}
 
-      {/* Comments */}
       {showComments && (
         <div className="pc-comments">
           {comments.map(c => {
-            const cName = [c.user?.firstName, c.user?.lastName].filter(Boolean).join(" ") || c.user?.username || "User";
+            const cName     = [c.user?.firstName, c.user?.lastName].filter(Boolean).join(" ") || c.user?.username || "User";
             const canDelete = String(c.user?._id) === String(currentUser._id) || isMe;
             return (
               <div key={c._id} className="pc-comment">
@@ -392,14 +351,13 @@ function PostCard({ post, currentUser, onDelete }) {
   );
 }
 
-// ── Create Post ─────────────────────────────────────────────────
 function CreatePost({ currentUser, onPost }) {
   const [caption,  setCaption]  = useState("");
   const [files,    setFiles]    = useState([]);
   const [previews, setPreviews] = useState([]);
   const [posting,  setPosting]  = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const fileRef = useRef();
+  const fileRef    = useRef();
   const authorName = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || currentUser.username || "You";
 
   const handleFiles = (e) => {
@@ -421,7 +379,7 @@ function CreatePost({ currentUser, onPost }) {
       const fd = new FormData();
       fd.append("caption", caption);
       files.forEach(f => fd.append("media", f));
-      const res = await API.post("/posts", fd); // axios sets boundary automatically
+      const res = await API.post("/posts", fd);
       onPost(res.data);
       setCaption(""); setFiles([]); setPreviews([]); setExpanded(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -468,11 +426,8 @@ function CreatePost({ currentUser, onPost }) {
             <span>Photo/Video</span>
           </button>
           <div style={{ flex: 1 }} />
-          {files.length > 0 && (
-            <span className="cp-file-badge">{files.length} file{files.length > 1 ? "s" : ""}</span>
-          )}
-          <button className="cp-post-btn" onClick={submit}
-            disabled={posting || (!caption.trim() && files.length === 0)}>
+          {files.length > 0 && <span className="cp-file-badge">{files.length} file{files.length > 1 ? "s" : ""}</span>}
+          <button className="cp-post-btn" onClick={submit} disabled={posting || (!caption.trim() && files.length === 0)}>
             {posting
               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><circle cx="12" cy="12" r="10"/></svg>
               : "Share"
@@ -539,31 +494,18 @@ export default function Feed({ currentUser }) {
               </svg>
             </div>
             <div className="feed-empty-title">Your feed is empty</div>
-            <div className="feed-empty-sub">Follow people from their profiles to see their posts here</div>
+            <div className="feed-empty-sub">Connect with people to see their posts here</div>
+            {/* Find People button — navigates to People tab */}
+            <button className="feed-empty-btn" onClick={() => window.dispatchEvent(new CustomEvent("nav:people"))}>
+              Find People
+            </button>
           </div>
         )}
 
         {posts.map(p => (
-          <PostCard key={p._id} post={p} currentUser={currentUser}
-            onDelete={deletePost} />
+          <PostCard key={p._id} post={p} currentUser={currentUser} onDelete={deletePost} />
         ))}
       </div>
-
-      <style>{`
-        @keyframes heartBurst {
-          0%   { transform: scale(0);   opacity: 1; }
-          50%  { transform: scale(1.3); opacity: 1; }
-          100% { transform: scale(1);   opacity: 0; }
-        }
-        @keyframes slideUp {
-          from { transform: translate(-50%, 16px); opacity: 0; }
-          to   { transform: translate(-50%, 0);    opacity: 1; }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import API from "../services/api";
 
 export default function AdminPanel({ onBack }) {
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [users,   setUsers]   = useState([]);
+  const [stats,   setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search,  setSearch]  = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -56,34 +56,39 @@ export default function AdminPanel({ onBack }) {
       </div>
 
       {loading ? <div className="loading">Loading...</div> : (
-        <div className="users-table">
-          <div className="table-header">
-            <span>User</span><span>Username</span><span>Age</span><span>Status</span><span>Actions</span>
-          </div>
-          {filtered.map(u => (
-            <div key={u._id} className={`table-row ${u.isBanned ? "banned" : ""}`}>
-              <span className="user-cell">
-                <div className="mini-avatar">{u.firstName?.[0] || "?"}</div>
-                <div>
-                  <div>{u.firstName} {u.lastName}</div>
-                  <div className="small-email">{u.email}</div>
-                </div>
-              </span>
-              <span>@{u.username || "—"}</span>
-              <span>{u.age || "—"}</span>
-              <span>
-                {u.isAdmin && <span className="badge admin">Admin</span>}
-                {u.isBanned && <span className="badge ban">Banned</span>}
-                {!u.isAdmin && !u.isBanned && <span className="badge ok">Active</span>}
-              </span>
-              <span className="actions">
-                <button className="btn-ban" onClick={() => toggleBan(u._id)}>
-                  {u.isBanned ? "Unban" : "Ban"}
-                </button>
-                <button className="btn-delete" onClick={() => deleteUser(u._id)}>Delete</button>
-              </span>
+        /* ── Wrap in overflow-x:auto so table scrolls on mobile ── */
+        <div className="users-table-wrap">
+          <div className="users-table">
+            <div className="table-header">
+              <span>User</span><span>Username</span><span>Age</span><span>Status</span><span>Actions</span>
             </div>
-          ))}
+            {filtered.map(u => (
+              <div key={u._id} className={`table-row ${u.isBanned ? "banned" : ""}`}>
+                <span className="user-cell">
+                  <div className="mini-avatar">{u.firstName?.[0] || "?"}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {u.firstName} {u.lastName}
+                    </div>
+                    <div className="small-email">{u.email}</div>
+                  </div>
+                </span>
+                <span style={{ fontSize: 13 }}>@{u.username || "—"}</span>
+                <span style={{ fontSize: 13 }}>{u.age || "—"}</span>
+                <span>
+                  {u.isAdmin  && <span className="badge admin">Admin</span>}
+                  {u.isBanned && <span className="badge ban">Banned</span>}
+                  {!u.isAdmin && !u.isBanned && <span className="badge ok">Active</span>}
+                </span>
+                <span className="actions">
+                  <button className="btn-ban"    onClick={() => toggleBan(u._id)}>
+                    {u.isBanned ? "Unban" : "Ban"}
+                  </button>
+                  <button className="btn-delete" onClick={() => deleteUser(u._id)}>Delete</button>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

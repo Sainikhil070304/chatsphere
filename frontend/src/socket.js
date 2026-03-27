@@ -2,11 +2,13 @@ import { io } from "socket.io-client";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+// Singleton socket — created once, never recreated on re-render
 export const socket = io(BASE, {
+  autoConnect: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
-  transports: ["websocket"],
+  transports: ["websocket"], // skip polling — much faster
 });
 
 // Global message bus — ChatWindow subscribes to this
@@ -19,17 +21,14 @@ socket.on("connect", () => {
   if (me) {
     socket.emit("online", me._id);
     socket.emit("getOnline");
-    console.log("📡 online emitted:", me._id);
   }
 });
 
 socket.on("receive", (m) => {
-  console.log("🔥 RECEIVE:", m);
   if (messageListeners.size > 0) {
     messageListeners.forEach(fn => fn(m));
   } else {
     messageBuffer.push(m);
-    console.log("📦 buffered, size:", messageBuffer.length);
   }
 });
 
